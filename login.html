@@ -3,169 +3,21 @@
     <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-/* ================= GLOBAL THEME ================= */
-/* ================= DARK BLUE THEME ================= */
-
-body {
-    font-family: 'Arial', sans-serif;
-    margin: 0;
-
-    background: radial-gradient(circle at top, #12002b, #05010f);
-    color: #e5e7eb;
-
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-/* ================= HEADER ================= */
-h2 {
-    color: #ff3df2;
-    text-shadow: 0 0 10px #ff3df2, 0 0 20px #7c3aed;
-    margin-top: 20px;
-}
-
-/* ================= NAVBAR ================= */
-div button {
-    background: transparent;
-    border: 1px solid #7c3aed;
-    color: #e5e7eb;
-
-    padding: 12px;
-    cursor: pointer;
-    font-weight: bold;
-
-    transition: 0.3s;
-}
-
-div button:hover {
-    background: #7c3aed;
-    box-shadow: 0 0 15px #7c3aed;
-    color: white;
-}
-
-/* ================= SECTIONS ================= */
-.section {
-    width: 90%;
-    max-width: 850px;
-
-    margin: 20px;
-    padding: 25px;
-
-    background: rgba(15, 10, 30, 0.6);
-    border: 1px solid rgba(255, 61, 242, 0.3);
-
-    border-radius: 16px;
-    -webkit-backdrop-filter: blur(12px);
-    backdrop-filter: blur(12px);
-
-    box-shadow: 0 0 25px rgba(124, 58, 237, 0.3);
-
-    text-align: center;
-
-    animation: glowFade 0.5s ease-in-out;
-}
-
-/* ================= INPUTS ================= */
-input:not([type="checkbox"]), select {
-    width: 260px;
-    padding: 10px;
-
-    margin: 8px auto;
-
-    background: #0b0618;
-    color: #fff;
-
-    border: 1px solid #7c3aed;
-    border-radius: 8px;
-
-    outline: none;
-}
-input[type="checkbox"] {
-    width: auto;
-    transform: scale(1.2);
-    margin: 10px 6px;
-    accent-color: #ff3df2;
-}
-
-input:focus, select:focus {
-    box-shadow: 0 0 10px #ff3df2;
-}
-
-/* ================= BUTTONS ================= */
-button {
-    margin: 6px;
-    padding: 10px 15px;
-
-    background: linear-gradient(90deg, #7c3aed, #ff3df2);
-    border: none;
-
-    color: white;
-    font-weight: bold;
-
-    border-radius: 8px;
-    cursor: pointer;
-
-    transition: 0.3s;
-}
-
-button:hover {
-    transform: scale(1.08);
-    box-shadow: 0 0 15px #ff3df2;
-}
-
-/* ================= CARDS ================= */
-#matchList div,
-#userList div,
-#profileViewer div {
-    background: rgba(0,0,0,0.5);
-    border: 1px solid #ff3df2;
-
-    padding: 15px;
-    margin: 10px 0;
-
-    border-radius: 12px;
-
-    box-shadow: 0 0 10px rgba(255, 61, 242, 0.2);
-}
-
-/* ================= CHAT ================= */
-#chatBox {
-    background: rgba(0,0,0,0.6);
-    border: 1px solid #7c3aed;
-    border-radius: 10px;
-    padding: 10px;
-}
-
-/* ================= TEXT ================= */
-p {
-    color: #d1d5db;
-    font-size: 14px;
-}
-
-/* ================= ANIMATION ================= */
-@keyframes glowFade {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-        box-shadow: none;
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}</style>
+            <link rel="stylesheet" href="style.css">
     </head>
 <body>
 
-<h2>Login / Register</h2>
+<div class="section" style="display:block; max-width:420px;">
+    <h1>Login / Register</h1>
 
-<input id="email" placeholder="Email"><br>
-<input id="password" type="password" placeholder="Password"><br><br>
+    <input id="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
 
-<button onclick="register()">Register</button>
-<button onclick="login()">Login</button>
+    <div>
+        <button onclick="register()">Register</button>
+        <button onclick="login()">Login</button>
+    </div>
+</div>
 
 <script src="app.js"></script>
 
