@@ -615,8 +615,13 @@ function startAudioSession(){
 
                     recognition.onerror = (e) => {
                     console.error('Speech recognition error', e);
+                    const errName = (e && e.error) ? e.error : (e && e.message) ? e.message : 'unknown';
                     if(statusEl) statusEl.innerText = `Speech recognition error: ${errName}`;
-                    if(transcriptEl) transcriptEl.innerText = 'Speech recognition error. Check browser console.';
+                    if(transcriptEl) transcriptEl.innerText = `Speech recognition error: ${errName}`;
+                    const ccSupport = document.getElementById('ccSupport');
+                    if(ccSupport){
+                        ccSupport.innerHTML = `Error: <b>${errName}</b>. Make sure microphone permission is allowed and use Chrome/Edge on localhost/HTTPS.`;
+                    }
                 };
 
                 recognition.onend = () => {
