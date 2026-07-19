@@ -16,6 +16,7 @@
     <button data-section="skills" onclick="showSection('skills')">Skills</button>
     <button data-section="users" onclick="showSection('users')">Users</button>
     <button data-section="match" onclick="showSection('match')">Matches</button>
+    <button data-section="chat" onclick="showSection('chat')">Chat</button>
     <button data-section="session" onclick="showSection('session')">Session</button>
     <button data-section="profile" onclick="showSection('profile')">Profile</button>
 </div>
@@ -82,6 +83,23 @@ I agree to AI-based suggestions
 
 </div>
 
+<!-- ================= CHAT SECTION ================= -->
+<div id="chat" class="section">
+
+<button onclick="loadChatMatches()">Load Matched Users</button>
+<h3>Matched Chat Users</h3>
+<div id="chatPartnerList"></div>
+
+<div id="chatArea" style="display:none; margin-top:20px;">
+    <h4 id="chatTitle">Chat</h4>
+    <div id="chatBox" style="min-height:200px; max-height:320px; overflow-y:auto; background:rgba(0,0,0,0.6); border:1px solid #7c3aed; border-radius:10px; padding:10px; margin-bottom:12px;"></div>
+    <textarea id="chatInput" placeholder="Type your message..." rows="3" style="width:100%; max-width:720px; background:#0b0618; color:#fff; border:1px solid #7c3aed; border-radius:8px; padding:10px;"></textarea>
+    <br>
+    <button onclick="sendMessage()">Send Message</button>
+</div>
+
+</div>
+
 <!-- ================= SESSION SECTION ================= -->
 <div id="session" class="section">
 
@@ -89,8 +107,25 @@ I agree to AI-based suggestions
 <p id="timerText">Session: 0 sec</p>
 <p id="coinDisplay">Coins: 0</p>
 
-<button onclick="startSession()">Start Teaching</button>
-<button onclick="stopSession()">Stop</button>
+<div id="videoContainer" style="display:none; margin:20px 0;">
+    <video id="localVideo" style="width:100%; max-width:400px; background:#000; border:2px solid #7c3aed; border-radius:8px; margin:10px 0;"></video>
+    <p id="videoStatus" style="color:#d1d5db; font-size:14px;"></p>
+</div>
+
+<!-- Local audio playback + live transcription -->
+<audio id="localAudio" autoplay style="display:none"></audio>
+<div style="margin-top:10px; color:#d1d5db;">
+    <p style="margin:0 0 8px 0; font-weight:bold; color:#a78bfa;">Live Captions (CC)</p>
+    <div id="transcript" style="min-height:100px; color:#e5e7eb; background:#0b1220; padding:12px; border-radius:6px; max-height:150px; overflow:auto; white-space:pre-wrap; font-size:14px; border:1px solid #334155;">No captions yet. Start an audio session and allow microphone access.</div>
+    <div id="ccSupport" style="margin-top:8px; color:#fca5a5; font-size:13px;"></div>
+</div>
+
+<button onclick="showSessionRequestPopup('video')">Start Teaching (with Video)</button><br>
+<button onclick="showSessionRequestPopup('audio')">Start Teaching (Audio Only)</button><br>
+<button onclick="stopVideoSession()">Stop Session</button>
+
+<p id="audioStatus" style="color:#a5b4fc; margin-top:12px;">Audio session inactive.</p>
+<canvas id="audioMeter" width="400" height="60" style="display:block; margin-top:10px; background:#111827; border:1px solid #4f46e5; border-radius:8px;"></canvas>
 
 </div>
 
@@ -314,6 +349,21 @@ Mobile number must be 10 digits, no letters or special characters.
 
 <br>
 <button onclick="logout()">Logout</button>
+
+<!-- ================= SESSION REQUEST POPUP ================= -->
+<div id="sessionRequestPopup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a2e; border:2px solid #7c3aed; border-radius:12px; padding:20px; z-index:1000; width:90%; max-width:500px; max-height:80vh; overflow-y:auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+        <h3>Start Teaching Session 🎓</h3>
+        <button onclick="closeSessionPopup()" style="background:none; border:none; color:#fff; font-size:24px; cursor:pointer; padding:0; width:30px; height:30px;">✕</button>
+    </div>
+    
+    <div id="requestContainer" style="color:#d1d5db;">
+        <!-- Skills and matching users will be loaded here -->
+    </div>
+</div>
+
+<!-- Popup Background Overlay -->
+<div id="popupOverlay" onclick="closeSessionPopup()" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999;"></div>
 
 <script src="app.js"></script>
 
