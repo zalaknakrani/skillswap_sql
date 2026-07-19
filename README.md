@@ -28,3 +28,4 @@ API endpoints (base `/api/auth`)
 - `POST /api/auth/update` — update user by email
 
 The server also serves static files from the project root, so your existing `dashboard.html` and `login.html` will be available.
+
