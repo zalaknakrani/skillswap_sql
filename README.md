@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Skill Swap — Backend
 
 Quick Node.js + MongoDB backend for the Skill Swap app.
@@ -29,3 +30,7 @@ API endpoints (base `/api/auth`)
 
 The server also serves static files from the project root, so your existing `dashboard.html` and `login.html` will be available.
 
+=======
+# skillSwap
+this is skill swap project
+>>>>>>> 8c6b4f6eef88983a487df983d16024a8ac28e216
