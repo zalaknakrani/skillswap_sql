@@ -141,7 +141,7 @@ function updateStateOptions(){
 
 function isProfileComplete(){
     if(!currentUser) return false;
-    let required = [currentUser.name, currentUser.contact, currentUser.country, currentUser.state, currentUser.degree, currentUser.address];
+    let required = [currentUser.name, currentUser.contact, currentUser.country, currentUser.state, currentUser.degree, currentUser.city];
     return required.every(field => typeof field === 'string' && field.trim().length > 0) && isPhoneValid(currentUser.contact);
 }
 
@@ -156,13 +156,384 @@ function updateNavButtons(){
         }
     });
 }
-// ---------------- USER SESSION ----------------
+// ================= SOCKET.IO SETUP =================
+const script = document.createElement('script');
+script.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
+document.head.appendChild(script);
+
+let socket = null;
+let socketReady = false;
+let pendingLoginEmail = null;
+let unreadMessages = JSON.parse(localStorage.getItem("unreadMessages")) || {};
+
+function initSocket() {
+    if (socketReady) return;
+    if (!window.io) return;
+
+    socket = io();
+    socketReady = true;
+
+    socket.off('receive_message');
+    socket.off('message_notification');
+    socket.off('user_online');
+    socket.off('user_offline');
+    socket.off('message_failed');
+
+    socket.on('receive_message', (data) => {
+        handleIncomingMessage(data);
+    });
+
+    socket.on('message_notification', (data) => {
+        showMessageNotification(data);
+    });
+
+    socket.on('user_online', (data) => {
+        console.log(`${data.email} is online`);
+    });
+
+    socket.on('user_offline', (data) => {
+        console.log(`${data.email} is offline`);
+    });
+
+    socket.on('message_failed', (data) => {
+        alert(`Failed to send message to ${data.to}: ${data.reason}`);
+    });
+
+    if (pendingLoginEmail) {
+        socket.emit('user_login', pendingLoginEmail);
+        pendingLoginEmail = null;
+    }
+}
+
+// Connect to server when Socket.io is ready
+script.onload = function() {
+    initSocket();
+};
+
+// Update navbar chat button with unread count
+function updateChatNavBadge() {
+    const totalUnread = Object.values(unreadMessages).reduce((a, b) => a + b, 0);
+    const chatBtn = document.querySelector('#dashboardNav button[data-section="chat"]');
+    
+    if(!chatBtn) return;
+    
+    // Remove old badge
+    const oldBadge = chatBtn.querySelector('.nav-badge');
+    if(oldBadge) oldBadge.remove();
+    
+    // Add new badge if there are unread messages
+    if(totalUnread > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'nav-badge';
+        badge.style.cssText = `
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            text-align: center;
+            line-height: 22px;
+            font-size: 11px;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        `;
+        badge.innerText = totalUnread > 99 ? '99+' : totalUnread;
+        
+        chatBtn.style.position = 'relative';
+        chatBtn.appendChild(badge);
+    }
+}
+
+// Handle incoming messages
+function handleIncomingMessage(data) {
+    if(!currentUser) return;
+    
+    const chatId = getChatId(currentUser.email, data.from);
+    const chats = JSON.parse(localStorage.getItem("chats")) || {};
+    chats[chatId] = chats[chatId] || [];
+    
+    chats[chatId].push({
+        from: data.from,
+        to: currentUser.email,
+        text: data.text,
+        time: data.time
+    });
+    
+    localStorage.setItem("chats", JSON.stringify(chats));
+    
+    // Track unread messages (like WhatsApp)
+    unreadMessages[data.from] = (unreadMessages[data.from] || 0) + 1;
+    localStorage.setItem("unreadMessages", JSON.stringify(unreadMessages));
+    
+    // Update navbar badge
+    updateChatNavBadge();
+    
+    // Refresh chat if open
+    if(chatPartnerEmail === data.from) {
+        renderChat();
+    } else {
+        // Update UI indication with unread count
+        updateChatPartnerBadge(data.from, unreadMessages[data.from]);
+    }
+    
+    // Play notification sound
+    playNotificationSound();
+}
+
+// Play WhatsApp-like notification sound
+function playNotificationSound() {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Create a pleasant notification tone (like WhatsApp)
+    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+    oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.2);
+}
+
+// Show notification when message arrives (WhatsApp style)
+function showMessageNotification(data) {
+    if(!currentUser) return;
+    
+    // Check if browser supports Notification API
+    if('Notification' in window && Notification.permission === 'granted') {
+        const unreadCount = unreadMessages[data.from] || 1;
+        new Notification('💬 ' + data.from, {
+            body: data.preview + `\n(${unreadCount} unread)`,
+            icon: '💬',
+            tag: 'chat-' + data.from,
+            requireInteraction: true,  // Keep notification persistent
+            badge: '💬'
+        });
+    }
+    
+    // Create WhatsApp-style notification bubble in dashboard
+    createWhatsAppStyleNotification(data);
+}
+
+// Create WhatsApp-style notification bubble
+function createWhatsAppStyleNotification(data) {
+    let notifContainer = document.getElementById("whatsappNotificationContainer");
+    
+    if(!notifContainer) {
+        notifContainer = document.createElement('div');
+        notifContainer.id = "whatsappNotificationContainer";
+        notifContainer.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 10000;
+            max-width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        `;
+        document.body.appendChild(notifContainer);
+    }
+    
+    const unreadCount = unreadMessages[data.from] || 1;
+    
+    // Check if notification for this user already exists
+    let existingNotif = document.getElementById('notif-' + data.from);
+    if(existingNotif) {
+        // Update unread count
+        existingNotif.querySelector('.unread-badge').innerText = unreadCount;
+        existingNotif.style.animation = 'none';
+        setTimeout(() => {
+            existingNotif.style.animation = 'slideInRight 0.3s ease-out';
+        }, 10);
+        return;
+    }
+    
+    const notifDiv = document.createElement('div');
+    notifDiv.id = 'notif-' + data.from;
+    notifDiv.style.cssText = `
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+        padding: 15px;
+        animation: slideInRight 0.3s ease-out;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border-left: 5px solid #25d366;
+        min-width: 350px;
+    `;
+    
+    notifDiv.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:start; gap:10px;">
+            <div style="flex:1;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <strong style="color:#000; font-size:16px;">💬 ${data.from}</strong>
+                    <span class="unread-badge" style="
+                        background:#25d366;
+                        color:white;
+                        border-radius:50%;
+                        width:24px;
+                        height:24px;
+                        display:flex;
+                        align-items:center;
+                        justify-content:center;
+                        font-size:12px;
+                        font-weight:bold;
+                    ">${unreadCount}</span>
+                </div>
+                <p style="margin:5px 0 0 0; color:#555; font-size:14px; word-wrap:break-word;">${data.preview}${data.preview.length === 50 ? '...' : ''}</p>
+            </div>
+            <button onclick="dismissNotification('${data.from}')" style="
+                background:none;
+                border:none;
+                color:#999;
+                font-size:20px;
+                cursor:pointer;
+                padding:0;
+                width:24px;
+                height:24px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+            ">✕</button>
+        </div>
+    `;
+    
+    notifDiv.onclick = (e) => {
+        if(e.target.tagName !== 'BUTTON' && !e.target.classList.contains('unread-badge')) {
+            selectChatPartner(data.from);
+            showSection('chat');
+        }
+    };
+    
+    notifContainer.appendChild(notifDiv);
+}
+
+// Dismiss individual notification
+function dismissNotification(email) {
+    const notif = document.getElementById('notif-' + email);
+    if(notif) {
+        notif.style.animation = 'slideOutRight 0.3s ease-out';
+        setTimeout(() => notif.remove(), 300);
+    }
+}
+
+// Update chat partner badge with unread count
+function updateChatPartnerBadge(email, unreadCount) {
+    const partnerButtons = document.querySelectorAll('#chatPartnerList button');
+    partnerButtons.forEach(btn => {
+        if(btn.textContent.includes(email)) {
+            // Remove old badge if exists
+            const oldBadge = btn.querySelector('.chat-badge');
+            if(oldBadge) oldBadge.remove();
+            
+            // Add new badge with count
+            const badge = document.createElement('span');
+            badge.className = 'chat-badge';
+            badge.style.cssText = `
+                display: inline-block;
+                background: #25d366;
+                color: white;
+                border-radius: 50%;
+                width: 24px;
+                height: 24px;
+                text-align: center;
+                line-height: 24px;
+                font-size: 12px;
+                font-weight: bold;
+                margin-left: 10px;
+            `;
+            badge.innerText = unreadCount > 99 ? '99+' : unreadCount;
+            btn.appendChild(badge);
+        }
+    });
+}
+
+// Clear unread messages when opening chat
+function clearUnreadMessages(email) {
+    if(unreadMessages[email]) {
+        delete unreadMessages[email];
+        localStorage.setItem("unreadMessages", JSON.stringify(unreadMessages));
+        
+        // Update navbar badge
+        updateChatNavBadge();
+        
+        // Remove notification
+        dismissNotification(email);
+        
+        // Remove badge from chat list
+        const partnerButtons = document.querySelectorAll('#chatPartnerList button');
+        partnerButtons.forEach(btn => {
+            if(btn.textContent.includes(email)) {
+                const badge = btn.querySelector('.chat-badge');
+                if(badge) badge.remove();
+            }
+        });
+    }
+}
+
+// Add animation to stylesheet
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideInRight {
+        from {
+            opacity: 0;
+            transform: translateX(400px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    @keyframes slideOutRight {
+        from {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        to {
+            opacity: 0;
+            transform: translateX(400px);
+        }
+    }
+`;
+document.head.appendChild(style);
+
+// Request notification permission
+if('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+}
+
+// ================= USER SESSION =================
 let currentUser = JSON.parse(localStorage.getItem("currentUser"));
 let authAction = 'login';
 
 // redirect if not logged in
 if (window.location.pathname.includes("dashboard.html") && !currentUser) {
     window.location.href = "login.html";
+}
+
+// If user is already logged in on dashboard, notify server
+if (currentUser && window.location.pathname.includes("dashboard.html")) {
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+            if (socketReady) {
+                socket.emit('user_login', currentUser.email);
+            } else {
+                pendingLoginEmail = currentUser.email;
+            }
+            console.log('Notified server: ' + currentUser.email + ' is online');
+        }, 1000);
+    });
 }
 
 // ---------------- REGISTER ----------------
@@ -194,7 +565,7 @@ function register(){
     country: "",
     state: "",
     degree: "",
-    address: ""
+    city: ""
 });
 
     localStorage.setItem("users", JSON.stringify(users));
@@ -218,14 +589,69 @@ function login(){
     }
 
     localStorage.setItem("currentUser", JSON.stringify(user));
+    
+    // Notify server that user logged in via Socket.io
+    if (socketReady) {
+        socket.emit('user_login', email);
+    } else {
+        pendingLoginEmail = email;
+    }
 
     alert("Login Success 🎉");
     window.location.href = "dashboard.html";
 }
 
+function toggleForgotPassword(show){
+    const section = document.getElementById("forgotPasswordSection");
+    if(!section) return;
+    section.style.display = show ? "block" : "none";
+    if(show){
+        document.getElementById("forgotEmail").value = document.getElementById("email").value || "";
+    } else {
+        document.getElementById("forgotEmail").value = "";
+        document.getElementById("forgotNewPassword").value = "";
+        document.getElementById("forgotConfirmPassword").value = "";
+    }
+}
 
-// ---------------- LOGOUT ----------------
+function resetPassword(){
+    let email = document.getElementById("forgotEmail").value.trim().toLowerCase();
+    let newPass = document.getElementById("forgotNewPassword").value.trim();
+    let confirmPass = document.getElementById("forgotConfirmPassword").value.trim();
+
+    if(!email || !newPass || !confirmPass){
+        alert("Please fill in all reset fields.");
+        return;
+    }
+
+    if(newPass !== confirmPass){
+        alert("Passwords do not match.");
+        return;
+    }
+
+    let users = JSON.parse(localStorage.getItem("users")) || [];
+    let userIndex = users.findIndex(u => u.email.toLowerCase() === email);
+
+    if(userIndex === -1){
+        alert("Email not found. Please register first.");
+        return;
+    }
+
+    users[userIndex].password = newPass;
+    localStorage.setItem("users", JSON.stringify(users));
+    alert("Password updated successfully ✅. Please log in with your new password.");
+    toggleForgotPassword(false);
+}
+
+// ---------- LOGOUT ----------
 function logout(){
+    // Clear unread messages
+    unreadMessages = {};
+    localStorage.removeItem("unreadMessages");
+    
+    if(socket) {
+        socket.disconnect();
+    }
     localStorage.removeItem("currentUser");
     window.location.href = "login.html";
 }
@@ -288,21 +714,36 @@ function findMatches(){
         return;
     }
 
+    const exactMatches = [];
+    const partialMatches = [];
+
+    const userSkills = (user.skills || []).map(s => String(s).toLowerCase());
+    const userLearn = (user.learn || []).map(s => String(s).toLowerCase());
+
     users.forEach(other => {
         if(other.email === user.email) return;
 
-        const userSkills = (user.skills || []).map(s => String(s).toLowerCase());
-        const userLearn = (user.learn || []).map(s => String(s).toLowerCase());
         const otherSkills = (other.skills || []).map(s => String(s).toLowerCase());
         const otherLearn = (other.learn || []).map(s => String(s).toLowerCase());
 
-        if(
-            otherSkills.length &&
-            otherLearn.length &&
-            otherSkills.some(s => userLearn.includes(s)) &&
-            userSkills.some(s => otherLearn.includes(s))
-        ){
-            found = true;
+        const isExact = otherSkills.length && otherLearn.length &&
+            arraysEqualAsSets(otherSkills, userLearn) &&
+            arraysEqualAsSets(otherLearn, userSkills);
+
+        const matchedOffers = otherSkills.filter(s => userLearn.includes(s));
+        const matchedWants = otherLearn.filter(s => userSkills.includes(s));
+        const isPartial = !isExact && (matchedOffers.length || matchedWants.length);
+
+        if(isExact){
+            exactMatches.push(other);
+        } else if(isPartial){
+            partialMatches.push({ other, matchedOffers, matchedWants });
+        }
+    });
+
+    if(exactMatches.length > 0){
+        matchList.innerHTML += `<h3>Exact Matches</h3>`;
+        exactMatches.forEach(other => {
             matchList.innerHTML += `
     <div style="border:1px solid #ccc; padding:10px; margin:5px;">
         <p>🤝 ${user.email} ↔ ${other.email}</p>
@@ -317,10 +758,32 @@ function findMatches(){
         </button>
     </div>
 `;
-        }
-    });
+        });
+    }
 
-    if(!found){
+    if(partialMatches.length > 0){
+        matchList.innerHTML += `<h3>Users with another skill match</h3>`;
+        partialMatches.forEach(item => {
+            const other = item.other;
+            const offerText = item.matchedOffers.length ? `Offers matched: ${item.matchedOffers.join(", ")}` : "";
+            const wantText = item.matchedWants.length ? `Wants matched: ${item.matchedWants.join(", ")}` : "";
+            matchList.innerHTML += `
+    <div style="border:1px solid #999; padding:10px; margin:5px; background:#111; border-radius:10px;">
+        <p>🔁 ${user.email} ↔ ${other.email}</p>
+        <div style="margin:10px 0; text-align:left; color:#d1d5db;">
+            <p><b>Offers:</b> ${formatSkillList(other.skills)}</p>
+            <p><b>Wants:</b> ${formatSkillList(other.learn)}</p>
+            <p style="margin-top:8px; color:#a5f3fc;">${offerText} ${offerText && wantText ? ' | ' : ''}${wantText}</p>
+        </div>
+        <button onclick="viewProfile('${other.email}')">
+            View ${other.email} Profile
+        </button>
+    </div>
+`;
+        });
+    }
+
+    if(exactMatches.length === 0 && partialMatches.length === 0){
         matchList.innerHTML = "No matches found ❌";
     }
 }
@@ -340,9 +803,16 @@ function getMatchesForUser(user){
         const otherLearn = other.learn.map(s => String(s).toLowerCase());
 
         return otherSkills.length && otherLearn.length &&
-            otherSkills.some(s => userLearn.includes(s)) &&
-            userSkills.some(s => otherLearn.includes(s));
+            arraysEqualAsSets(otherSkills, userLearn) &&
+            arraysEqualAsSets(otherLearn, userSkills);
     });
+}
+
+function arraysEqualAsSets(a, b){
+    const setA = [...new Set(a.map(x => String(x).trim()))].sort();
+    const setB = [...new Set(b.map(x => String(x).trim()))].sort();
+    if(setA.length !== setB.length) return false;
+    return setA.every((value, index) => value === setB[index]);
 }
 
 function getChatId(email1, email2){
@@ -360,13 +830,22 @@ function loadChatMatches(){
         return;
     }
 
-    list.innerHTML = partners.map(p => `
+    list.innerHTML = partners.map(p => {
+        const unreadCount = unreadMessages[p.email];
+        const badge = unreadCount ? `<span class="chat-badge" style="display:inline-block;background:#25d366;color:white;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px;font-size:12px;font-weight:bold;margin-left:10px;">${unreadCount > 99 ? '99+' : unreadCount}</span>` : '';
+        
+        return `
         <div style="margin:6px 0;">
-            <button style="width:100%; max-width:720px; text-align:left;" onclick="selectChatPartner('${p.email}')">
-                ${p.email} — Offers: ${formatSkillList(p.skills)} | Wants: ${formatSkillList(p.learn)}
+            <button style="width:100%; max-width:720px; text-align:left; display:flex; align-items:center; justify-content:space-between;" onclick="selectChatPartner('${p.email}')">
+                <span>${p.email} — Offers: ${formatSkillList(p.skills)} | Wants: ${formatSkillList(p.learn)}</span>
+                ${badge}
             </button>
         </div>
-    `).join('');
+    `;
+    }).join('');
+    
+    // Update navbar badge
+    updateChatNavBadge();
 }
 
 let chatPartnerEmail = null;
@@ -375,6 +854,7 @@ function selectChatPartner(email){
     chatPartnerEmail = email;
     document.getElementById("chatArea").style.display = "block";
     document.getElementById("chatTitle").innerText = `Chat with ${email}`;
+    clearUnreadMessages(email);  // Mark as read when opening chat
     renderChat();
 }
 
@@ -385,6 +865,23 @@ function renderChat(){
     let chatId = getChatId(currentUser.email, chatPartnerEmail);
     let chats = JSON.parse(localStorage.getItem("chats")) || {};
     let messages = chats[chatId] || [];
+
+    // Deduplicate messages by `id` (fallback to composite key)
+    const seen = new Set();
+    const cleaned = [];
+    for (const msg of messages) {
+        const key = msg.id || `${msg.from}__${msg.to}__${msg.time}__${msg.text}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cleaned.push(msg);
+    }
+
+    // If duplicates were removed, persist the cleaned array
+    if (cleaned.length !== messages.length) {
+        chats[chatId] = cleaned;
+        localStorage.setItem("chats", JSON.stringify(chats));
+        messages = cleaned;
+    }
 
     if(messages.length === 0){
         box.innerHTML = "<p style='color:#c7c5cd;'>No messages yet. Start the conversation.</p>";
@@ -411,14 +908,23 @@ function sendMessage(){
     let chatId = getChatId(currentUser.email, chatPartnerEmail);
     let chats = JSON.parse(localStorage.getItem("chats")) || {};
     chats[chatId] = chats[chatId] || [];
-    chats[chatId].push({
+    
+    const messageData = {
         from: currentUser.email,
         to: chatPartnerEmail,
         text,
         time: new Date().toISOString()
-    });
+    };
 
+    
+    chats[chatId].push(messageData);
     localStorage.setItem("chats", JSON.stringify(chats));
+    
+    // Send message via Socket.io for real-time notification
+    if(socket) {
+        socket.emit('send_message', messageData);
+    }
+    
     input.value = "";
     renderChat();
 }
@@ -815,62 +1321,117 @@ function sendSessionRequest(toUserEmail, sessionType){
         alert("User not found");
         return;
     }
-    // Store the request (create mirrored entries so both parties can see status)
-    const requestId = Date.now() + "-" + Math.random().toString(36).slice(2,8);
-    let requests = JSON.parse(localStorage.getItem("sessionRequests")) || {};
+    
+    // Send the call request using the new notification system
+    let skill = (currentUser.skills && currentUser.skills.length > 0) ? currentUser.skills[0] : "Teaching";
+    const request = sendCallRequest(toUserEmail, sessionType, skill);
 
-    // Ensure arrays exist for recipient and sender
-    if(!requests[toUserEmail]) requests[toUserEmail] = [];
-    if(!requests[currentUser.email]) requests[currentUser.email] = [];
-
-    const reqObjForRecipient = {
-        id: requestId,
-        from: currentUser.email,
-        to: toUserEmail,
-        skill: "Teaching",
-        sessionType: sessionType,
-        timestamp: new Date().toISOString(),
-        status: "pending"
-    };
-
-    const reqObjForSender = Object.assign({}, reqObjForRecipient, { outgoing: true });
-
-    requests[toUserEmail].push(reqObjForRecipient);
-    requests[currentUser.email].push(reqObjForSender);
-
-    localStorage.setItem("sessionRequests", JSON.stringify(requests));
-
-    alert(`✅ Session request sent to ${toUserEmail}!\n\nWaiting for their response...`);
+    if(request){
+        startPollingForRequestResponse(request.id, sessionType);
+        alert(`✅ ${sessionType === 'video' ? 'Video call' : 'Audio call'} request sent to ${toUserEmail}!\n\nThey will receive a notification to accept or reject your request.`);
+    } else {
+        alert('❌ Unable to send the request. Please try again.');
+    }
     closeSessionPopup();
-
-    // Start polling for the recipient's response; only start the session after ACCEPT
-    startPollingForRequestResponse(toUserEmail, requestId, sessionType);
 }
 
 // Poll localStorage for request status changes so requester can auto-start when accepted
-function startPollingForRequestResponse(toUserEmail, requestId, sessionType){
+function startPollingForRequestResponse(requestId, sessionType){
     const pollKey = "poll_" + requestId;
     // avoid duplicate polls
     if(window[pollKey]) return;
 
     window[pollKey] = setInterval(()=>{
-        let requests = JSON.parse(localStorage.getItem("sessionRequests")) || {};
-        // look in sender's list for the request
-        const myRequests = requests[currentUser.email] || [];
-        const mine = myRequests.find(r => r.id === requestId);
-        if(mine && mine.status === "accepted"){
-            clearInterval(window[pollKey]);
-            window[pollKey] = null;
-            alert(`✅ Your session request was accepted by ${toUserEmail}. Starting ${sessionType} session now.`);
-            if(sessionType === "video"){
-                initializeVideo();
-            } else {
-                // start audio session (captures mic + transcription)
-                startAudioSession();
+        let allRequests = JSON.parse(localStorage.getItem("callRequests")) || [];
+        const mine = allRequests.find(r => r.id === requestId && r.requesterEmail === currentUser.email);
+
+        if(mine){
+            if(mine.status === "accepted"){
+                clearInterval(window[pollKey]);
+                window[pollKey] = null;
+                alert(`✅ Your session request was accepted by ${mine.recipientEmail}. Starting ${sessionType} session now.`);
+                // start a shared session record so both sides can monitor end
+                startLocalSession(mine.id, sessionType, mine);
+                showSection('session');
+                if(sessionType === "video"){
+                    initializeVideo();
+                } else {
+                    startAudioSession();
+                }
+            } else if(mine.status === "rejected"){
+                clearInterval(window[pollKey]);
+                window[pollKey] = null;
+                alert(`❌ ${sessionType === 'video' ? 'Video call' : 'Audio call'} request was rejected by ${mine.recipientEmail}.`);
             }
         }
-        // optional: stop polling after timeout (2 minutes)
     }, 2000);
+}
+
+
+// ---------------- Session tracking (shared) ----------------
+let currentSessionId = null;
+
+function startLocalSession(sessionId, type, requestObj){
+    if(!sessionId) return;
+    currentSessionId = sessionId;
+    const key = 'session_' + sessionId;
+    const sessionData = {
+        status: 'active',
+        requesterEmail: requestObj.requesterEmail || requestObj.requesterEmail,
+        recipientEmail: requestObj.recipientEmail || requestObj.recipientEmail,
+        type: type,
+        startedAt: Date.now()
+    };
+    localStorage.setItem(key, JSON.stringify(sessionData));
+    monitorSessionEnd(sessionId);
+}
+
+function monitorSessionEnd(sessionId){
+    const key = 'session_' + sessionId;
+    const pollKey = 'session_poll_' + sessionId;
+    if(window[pollKey]) return;
+    window[pollKey] = setInterval(()=>{
+        const s = JSON.parse(localStorage.getItem(key));
+        if(!s) return;
+        if(s.status === 'ended'){
+            clearInterval(window[pollKey]);
+            window[pollKey] = null;
+            // Stop local media if this client is part of the session
+            if(currentSessionId === sessionId){
+                try{ stopVideoSession(); }catch(e){}
+                try{ stopAudioSession(); }catch(e){}
+                currentSessionId = null;
+            }
+        }
+    }, 1000);
+}
+
+function endCurrentSession(){
+    if(!currentSessionId){
+        alert('No active session to end.');
+        return;
+    }
+    const key = 'session_' + currentSessionId;
+    const s = JSON.parse(localStorage.getItem(key)) || {};
+    s.status = 'ended';
+    s.endedAt = Date.now();
+    localStorage.setItem(key, JSON.stringify(s));
+
+    // also update callRequests record if available
+    let allRequests = JSON.parse(localStorage.getItem('callRequests')) || [];
+    allRequests = allRequests.map(r => {
+        if(r.id === currentSessionId){
+            r.status = 'ended';
+            r.responded = true;
+        }
+        return r;
+    });
+    localStorage.setItem('callRequests', JSON.stringify(allRequests));
+
+    // stop local media
+    try{ stopVideoSession(); }catch(e){}
+    try{ stopAudioSession(); }catch(e){}
+    currentSessionId = null;
 }
 
 function loadIncomingRequests(){
@@ -997,26 +1558,64 @@ function getSuggestions(){
     }
 }
 
+function getFilterValue(id){
+    return (document.getElementById(id)?.value || "").trim().toLowerCase();
+}
+
 function loadUsers(){
     let list = document.getElementById("userList");
     let users = JSON.parse(localStorage.getItem("users")) || [];
 
+    const filterState = getFilterValue("filterState");
+    const filterCity = getFilterValue("filterCity");
+    const filterOffer = getFilterValue("filterOffer");
+    const filterWant = getFilterValue("filterWant");
+    const filterDegree = getFilterValue("filterDegree");
+
+    const filteredUsers = users.filter(u => {
+        if(filterState && !(u.state || "").toLowerCase().includes(filterState)) return false;
+        if(filterCity && !(u.city || "").toLowerCase().includes(filterCity)) return false;
+        if(filterDegree && !(u.degree || "").toLowerCase().includes(filterDegree)) return false;
+
+        if(filterOffer){
+            const offers = (u.skills || []).map(s => String(s || "").toLowerCase());
+            if(!offers.some(skill => skill.includes(filterOffer))) return false;
+        }
+
+        if(filterWant){
+            const wants = (u.learn || []).map(s => String(s || "").toLowerCase());
+            if(!wants.some(skill => skill.includes(filterWant))) return false;
+        }
+
+        return true;
+    });
+
     list.innerHTML = "";
 
-    if(users.length === 0){
+    if(filteredUsers.length === 0){
         list.innerHTML = "No users found ❌";
         return;
     }
 
-    users.forEach(u=>{
+    filteredUsers.forEach(u=>{
         list.innerHTML += `
-            <div style="border:1px solid #ccc; padding:10px; margin:5px;">
-                <b>${u.email}</b><br>
-                Offers: ${formatSkillList(u.skills)}<br>
-Wants: ${formatSkillList(u.learn)}
+            <div style="border:1px solid #ccc; padding:10px; margin:5px; background:#110a27; border-radius:12px;">
+                <b style="font-size:15px;">${u.email}</b><br>
+                <small><b>City:</b> ${u.city || '-'} | <b>State:</b> ${u.state || '-'}</small><br>
+                <small><b>Degree:</b> ${u.degree || '-'}</b></small><br>
+                <div style="margin-top:8px;"><b>Offers:</b> ${formatSkillList(u.skills)}</div>
+                <div><b>Wants:</b> ${formatSkillList(u.learn)}</div>
             </div>
         `;
     });
+}
+
+function clearUserFilters(){
+    ['filterState','filterCity','filterOffer','filterWant','filterDegree'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.value = "";
+    });
+    loadUsers();
 }
 function addSkill(){
     let skill = document.getElementById("skill").value.trim().toUpperCase();
@@ -1105,6 +1704,13 @@ document.addEventListener('DOMContentLoaded', () => {
             try { el.setSelectionRange(start, end); } catch(e) { }
         });
     });
+    
+    // Initialize navbar badge for unread messages
+    if(window.location.pathname.includes("dashboard.html")) {
+        setTimeout(() => {
+            updateChatNavBadge();
+        }, 500);
+    }
 });
 
 function loadDropdowns(){
@@ -1136,6 +1742,17 @@ window.onload = function(){
 
         if(!isProfileComplete()){
             showSection('profile');
+        }
+
+        // Attach Enter key handler for chat input: Enter sends message, Shift+Enter inserts newline
+        const chatInputEl = document.getElementById("chatInput");
+        if(chatInputEl){
+            chatInputEl.addEventListener('keydown', function(e){
+                if(e.key === 'Enter' && !e.shiftKey){
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
         }
     }
 };
@@ -1179,7 +1796,24 @@ function showSection(id){
 
     if(id === 'chat'){
         loadChatMatches();
+        // Clear unread badge from chat button
+        const chatBtn = document.querySelector('#dashboardNav button[data-section="chat"]');
+        if(chatBtn) {
+            const badge = chatBtn.querySelector('.nav-badge');
+            if(badge) badge.remove();
+        }
     }
+    
+    // Update navbar button styling
+    document.querySelectorAll("#dashboardNav button").forEach(btn => {
+        if(btn.getAttribute("data-section") === id){
+            btn.style.background = "#7c3aed";
+            btn.style.color = "#fff";
+        } else {
+            btn.style.background = "";
+            btn.style.color = "";
+        }
+    });
 }
 function saveProfile(){
     let name = document.getElementById("name").value.trim();
@@ -1187,7 +1821,7 @@ function saveProfile(){
     let country = document.getElementById("country").value;
     let state = document.getElementById("state").value;
     let degree = document.getElementById("degree").value.trim();
-    let address = document.getElementById("address").value.trim();
+    let city = document.getElementById("city").value.trim();
 
     if(!validateContact()){
         document.getElementById("contact").focus();
@@ -1203,7 +1837,7 @@ function saveProfile(){
             u.country = country;
             u.state = state;
             u.degree = degree.toLowerCase();
-            u.address = address;
+            u.city = city;
 
             currentUser = u;
         }
@@ -1231,7 +1865,7 @@ function populateProfileForm(){
     updateStateOptions();
     document.getElementById("state").value = currentUser.state || "";
     document.getElementById("degree").value = currentUser.degree || "";
-    document.getElementById("address").value = currentUser.address || "";
+    document.getElementById("city").value = currentUser.city || "";
 }
 
 function displayProfile(){
@@ -1246,7 +1880,7 @@ function displayProfile(){
         <p><b>Country:</b> ${currentUser.country || "-"}</p>
         <p><b>State:</b> ${currentUser.state || "-"}</p>
         <p><b>Degree:</b> ${currentUser.degree || "-"}</p>
-        <p><b>Address:</b> ${currentUser.address || "-"}</p>
+        <p><b>City:</b> ${currentUser.city || "-"}</p>
     `;
 }
 
@@ -1277,4 +1911,219 @@ function viewProfile(email){
             <p><b>Wants:</b> ${formatSkillList(user.learn)}</p>
         </div>
     `;
+}
+
+// ================= INCOMING CALL/AUDIO REQUEST SYSTEM =================
+
+let incomingRequestTimeout = null;
+let incomingRequestTimerInterval = null;
+let incomingRequestPopupVisible = false;
+let currentRequestData = null;
+
+// Check for incoming requests periodically
+function checkIncomingRequests(){
+    if(!currentUser || incomingRequestPopupVisible) return;
+    
+    let allRequests = JSON.parse(localStorage.getItem("callRequests")) || [];
+    
+    // Filter requests for current user that haven't been responded to yet
+    let pendingRequests = allRequests.filter(req => 
+        req.recipientEmail === currentUser.email && 
+        !req.responded &&
+        (Date.now() - req.timestamp) < 30000 // Only show requests less than 30 seconds old
+    );
+    
+    if(pendingRequests.length > 0){
+        let request = pendingRequests[0]; // Show the first pending request
+        currentRequestData = request;
+        showIncomingRequestPopup(request);
+    }
+}
+
+// Show incoming request popup
+function showIncomingRequestPopup(request){
+    let popup = document.getElementById("incomingRequestPopup");
+    let overlay = document.getElementById("incomingRequestOverlay");
+    
+    if(!popup || !overlay) return;
+    
+    incomingRequestPopupVisible = true;
+    
+    // Update popup with request details
+    document.getElementById("requesterName").innerHTML = `📩 From: <strong>${request.requesterName || request.requesterEmail}</strong>`;
+    document.getElementById("requestType").innerText = request.type === 'video' ? 'Video Call' : 'Audio Call';
+    document.getElementById("requestSkill").innerText = request.skill || 'General Teaching';
+    document.getElementById("requestTime").innerText = new Date(request.timestamp).toLocaleTimeString();
+    
+    // Reset timer text and show popup
+    let timer = document.getElementById("autoCloseTimer");
+    if(timer) timer.innerText = '30';
+    popup.style.display = 'block';
+    overlay.style.display = 'block';
+    
+    // Play notification sound (if available)
+    playNotificationSound();
+    
+    // Auto-close after 30 seconds
+    if(incomingRequestTimeout) clearTimeout(incomingRequestTimeout);
+    if(incomingRequestTimerInterval) clearInterval(incomingRequestTimerInterval);
+    
+    let timeLeft = 30;
+    incomingRequestTimerInterval = setInterval(() => {
+        timeLeft--;
+        let timer = document.getElementById("autoCloseTimer");
+        if(timer) timer.innerText = timeLeft;
+        
+        if(timeLeft <= 0){
+            clearInterval(incomingRequestTimerInterval);
+            incomingRequestTimerInterval = null;
+            rejectCallRequest();
+        }
+    }, 1000);
+    
+    incomingRequestTimeout = setTimeout(() => {
+        rejectCallRequest();
+    }, 30000);
+}
+
+// Hide the popup
+function hideIncomingRequestPopup(){
+    let popup = document.getElementById("incomingRequestPopup");
+    let overlay = document.getElementById("incomingRequestOverlay");
+    
+    if(popup) popup.style.display = 'none';
+    if(overlay) overlay.style.display = 'none';
+    
+    if(incomingRequestTimeout){
+        clearTimeout(incomingRequestTimeout);
+        incomingRequestTimeout = null;
+    }
+    if(incomingRequestTimerInterval){
+        clearInterval(incomingRequestTimerInterval);
+        incomingRequestTimerInterval = null;
+    }
+    incomingRequestPopupVisible = false;
+    currentRequestData = null;
+}
+
+// Play notification sound
+function playNotificationSound(){
+    // Create a simple beep sound using Web Audio API
+    try {
+        let audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let oscillator = audioContext.createOscillator();
+        let gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+    } catch(e) {
+        console.log("Notification sound not available");
+    }
+}
+
+// Accept call request
+function acceptCallRequest(){
+    if(!currentRequestData) return;
+    const request = currentRequestData;
+
+    // Mark request as responded
+    let allRequests = JSON.parse(localStorage.getItem("callRequests")) || [];
+    allRequests = allRequests.map(req => {
+        if(req.id === request.id){
+            req.responded = true;
+            req.status = 'accepted';
+        }
+        return req;
+    });
+    localStorage.setItem("callRequests", JSON.stringify(allRequests));
+
+    hideIncomingRequestPopup();
+
+    // Show success message
+    alert(`✅ Call accepted from ${request.requesterName || request.requesterEmail}!\n\nStarting ${request.type} session...`);
+
+    // Navigate to session section
+    // create a shared session record and monitor for end
+    startLocalSession(request.id, request.type, request);
+    showSection('session');
+
+    // Start the session (video or audio)
+    if(request.type === 'video'){
+        initializeVideo();
+    } else {
+        startAudioSession();
+    }
+}
+
+// Reject call request
+function rejectCallRequest(){
+    if(!currentRequestData) return;
+    
+    let requesterEmail = currentRequestData.requesterEmail;
+    
+    // Mark request as responded
+    let allRequests = JSON.parse(localStorage.getItem("callRequests")) || [];
+    allRequests = allRequests.map(req => {
+        if(req.id === currentRequestData.id){
+            req.responded = true;
+            req.status = 'rejected';
+        }
+        return req;
+    });
+    localStorage.setItem("callRequests", JSON.stringify(allRequests));
+    
+    hideIncomingRequestPopup();
+    
+    console.log(`Call request from ${requesterEmail} was rejected`);
+}
+
+// Send call request to another user
+function sendCallRequest(recipientEmail, type, skill){
+    if(!currentUser || !recipientEmail) return null;
+    
+    let allRequests = JSON.parse(localStorage.getItem("callRequests")) || [];
+    
+    let request = {
+        id: Date.now() + Math.random().toString(36).substr(2, 9),
+        requesterEmail: currentUser.email,
+        requesterName: currentUser.name || currentUser.email,
+        recipientEmail: recipientEmail,
+        type: type, // 'video' or 'audio'
+        skill: skill || '',
+        timestamp: Date.now(),
+        responded: false,
+        status: 'pending'
+    };
+    
+    allRequests.push(request);
+    localStorage.setItem("callRequests", JSON.stringify(allRequests));
+    
+    console.log(`Call request sent to ${recipientEmail} for ${type} session`);
+    return request;
+}
+
+// Initialize request checking when dashboard loads
+function initializeRequestNotifications(){
+    if(!currentUser) return;
+    
+    // Check for incoming requests every 1 second
+    setInterval(checkIncomingRequests, 1000);
+    
+    console.log("✅ Request notifications initialized for " + currentUser.email);
+}
+
+// Start checking when page loads
+if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initializeRequestNotifications);
+} else {
+    initializeRequestNotifications();
 }

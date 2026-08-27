@@ -8,18 +8,26 @@
 
     </head>
 <body>
+<div class="app-shell">
+    <header class="app-header">
+        <div class="app-brand">
+            <div class="brand-mark">S</div>
+            <div>
+                <p class="eyebrow">Skill Swap</p>
+                <h1 class="page-title">Skill Exchange</h1>
+            </div>
+        </div>
+        <button id="themeToggleBtn" class="theme-toggle" type="button" onclick="toggleTheme()" aria-pressed="false">Toggle Theme</button>
+    </header>
 
-<h1>SkillSwap 🚀</h1>
-
-<!-- NAVBAR -->
-<div id="dashboardNav">
-    <button data-section="skills" onclick="showSection('skills')">Skills</button>
-    <button data-section="users" onclick="showSection('users')">Users</button>
-    <button data-section="match" onclick="showSection('match')">Matches</button>
-    <button data-section="chat" onclick="showSection('chat')">Chat</button>
-    <button data-section="session" onclick="showSection('session')">Session</button>
-    <button data-section="profile" onclick="showSection('profile')">Profile</button>
-</div>
+    <div id="dashboardNav" class="nav-bar">
+        <button data-section="skills" onclick="showSection('skills')">Skills</button>
+        <button data-section="users" onclick="showSection('users')">Users</button>
+        <button data-section="match" onclick="showSection('match')">Matches</button>
+        <button data-section="chat" onclick="showSection('chat')">Chat</button>
+        <button data-section="session" onclick="showSection('session')">Session</button>
+        <button data-section="profile" onclick="showSection('profile')">Profile</button>
+    </div>
 
 <!-- ================= SKILLS SECTION ================= -->
 <div id="skills" class="section">
@@ -66,9 +74,33 @@ I agree to AI-based suggestions
 <!-- ================= USERS SECTION ================= -->
 <div id="users" class="section">
 
-<button onclick="loadUsers()">Show Users</button>
-<h3>All Users</h3>
-<div id="userList"></div>
+    <div id="userFilterPanel" style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+        <div style="flex:1; min-width:200px;">
+            <label for="filterState" style="display:block; margin-bottom:6px;">State</label>
+            <input id="filterState" placeholder="Filter by state" style="width:100%; padding:10px; border:1px solid #7c3aed; border-radius:8px; background:#0b0618; color:#fff;">
+        </div>
+        <div style="flex:1; min-width:200px;">
+            <label for="filterCity" style="display:block; margin-bottom:6px;">City</label>
+            <input id="filterCity" placeholder="Filter by city" style="width:100%; padding:10px; border:1px solid #7c3aed; border-radius:8px; background:#0b0618; color:#fff;">
+        </div>
+        <div style="flex:1; min-width:200px;">
+            <label for="filterOffer" style="display:block; margin-bottom:6px;">Skill Offer</label>
+            <input id="filterOffer" placeholder="Filter by skill offered" style="width:100%; padding:10px; border:1px solid #7c3aed; border-radius:8px; background:#0b0618; color:#fff;">
+        </div>
+        <div style="flex:1; min-width:200px;">
+            <label for="filterWant" style="display:block; margin-bottom:6px;">Skill Wants</label>
+            <input id="filterWant" placeholder="Filter by skill wanted" style="width:100%; padding:10px; border:1px solid #7c3aed; border-radius:8px; background:#0b0618; color:#fff;">
+        </div>
+        <div style="flex:1; min-width:200px;">
+            <label for="filterDegree" style="display:block; margin-bottom:6px;">Degree</label>
+            <input id="filterDegree" placeholder="Filter by degree" style="width:100%; padding:10px; border:1px solid #7c3aed; border-radius:8px; background:#0b0618; color:#fff;">
+        </div>
+    </div>
+
+    <button onclick="loadUsers()" style="margin-right:12px;">Show Users</button>
+    <button onclick="clearUserFilters()">Clear Filters</button>
+    <h3 style="margin-top:20px;">All Users</h3>
+    <div id="userList"></div>
 
 </div>
 
@@ -116,7 +148,7 @@ I agree to AI-based suggestions
 <audio id="localAudio" autoplay style="display:none"></audio>
 <button onclick="showSessionRequestPopup('video')">Start Teaching (with Video)</button><br>
 <button onclick="showSessionRequestPopup('audio')">Start Teaching (Audio Only)</button><br>
-<button onclick="stopVideoSession()">Stop Session</button>
+    <button onclick="endCurrentSession()">Stop Session</button>
 
 <p id="audioStatus" style="color:#a5b4fc; margin-top:12px;">Audio session inactive.</p>
 <canvas id="audioMeter" width="400" height="60" style="display:block; margin-top:10px; background:#111827; border:1px solid #4f46e5; border-radius:8px;"></canvas>
@@ -333,7 +365,7 @@ Mobile number must be 10 digits, no letters or special characters.
     <option value="" disabled selected hidden>Select State</option>
 </select><br><br>
 <input id="degree" placeholder="Degree (e.g. B.Tech, MBA)"><br><br>
-<input id="address" placeholder="Address"><br><br>
+    <input id="city" placeholder="City"><br><br>
 <button onclick="saveProfile()">Save Profile</button>
 
 <h4>Your Profile:</h4>
@@ -359,7 +391,56 @@ Mobile number must be 10 digits, no letters or special characters.
 <!-- Popup Background Overlay -->
 <div id="popupOverlay" onclick="closeSessionPopup()" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999;"></div>
 
+<!-- ================= INCOMING CALL/AUDIO REQUEST POPUP ================= -->
+<div id="incomingRequestPopup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:linear-gradient(135deg, #1a1a2e 0%, #2d1b4e 100%); border:3px solid #10b981; border-radius:15px; padding:30px; z-index:2000; width:90%; max-width:450px; box-shadow:0 0 30px rgba(16, 185, 129, 0.5); animation:slideIn 0.3s ease-out;">
+    <div style="text-align:center;">
+        <div style="font-size:48px; margin-bottom:15px; animation:pulse 1.5s infinite;">📞</div>
+        <h2 id="requestSound" style="color:#10b981; margin:0 0 10px 0; font-size:24px;">Incoming Call Request</h2>
+        <p id="requesterName" style="color:#d1d5db; font-size:18px; margin-bottom:20px;"></p>
+        
+        <div id="requestDetails" style="background:rgba(0,0,0,0.4); border-left:4px solid #10b981; padding:15px; margin-bottom:20px; text-align:left; border-radius:8px;">
+            <p style="margin:5px 0; color:#fbbf24;"><strong>Interaction Type:</strong> <span id="requestType" style="color:#fff;">Audio</span></p>
+            <p style="margin:5px 0; color:#fbbf24;"><strong>Skill Being Taught:</strong> <span id="requestSkill" style="color:#fff;">---</span></p>
+            <p style="margin:5px 0; color:#fbbf24;"><strong>Time:</strong> <span id="requestTime" style="color:#fff;"></span></p>
+        </div>
+        
+        <div style="display:flex; gap:10px; justify-content:center;">
+            <button onclick="acceptCallRequest()" style="background:#10b981; color:#fff; border:none; padding:12px 30px; border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer; transition:all 0.3s; flex:1; max-width:200px;">
+                ✓ Accept
+            </button>
+            <button onclick="rejectCallRequest()" style="background:#ef4444; color:#fff; border:none; padding:12px 30px; border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer; transition:all 0.3s; flex:1; max-width:200px;">
+                ✕ Reject
+            </button>
+        </div>
+        
+        <p id="requestWarning" style="color:#fbbf24; font-size:12px; margin-top:15px; display:none;">⚠️ Auto-closing in <span id="autoCloseTimer">30</span> seconds...</p>
+    </div>
+</div>
+
+<!-- Incoming Request Overlay -->
+<div id="incomingRequestOverlay" onclick="rejectCallRequest()" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1999;"></div>
+
+<style>
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -60%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+</style>
+
+</div>
 <script src="app.js"></script>
+<script src="theme.js"></script>
 
 </body>
 </html>

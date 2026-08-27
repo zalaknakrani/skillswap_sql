@@ -10,7 +10,7 @@ const UserSchema = new mongoose.Schema({
   contact: String,
   country: String,
   degree: String,
-  address: String
+  city: String
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);
