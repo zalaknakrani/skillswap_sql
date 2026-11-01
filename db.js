@@ -6,7 +6,7 @@ const db = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'skillswap_sql',
+    database: process.env.DB_NAME || 'skillswap_final',
     port: Number(process.env.DB_PORT || 3306),
     waitForConnections: true,
     connectionLimit: 10,
